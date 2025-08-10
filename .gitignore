@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Environment variables (CRITICAL!)
+.env
+backend/.env
+smart_contracts/.env
+frontend/.env
+
+# Build outputs
+build/
+dist/
+.vite/
+
+# Smart contract artifacts
+smart_contracts/artifacts/
+smart_contracts/cache/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Private keys (NEVER COMMIT!)
+*.key
+private-key.txt
+wallet.json
