@@ -1,33 +1,100 @@
 # Dependencies
 node_modules/
+/.pnp
+.pnp.js
 
-# Environment variables (CRITICAL!)
+# Testing
+/coverage
+
+# Production builds
+/build
+/dist
+frontend/dist
+backend/dist
+
+# Environment variables
 .env
-backend/.env
-smart_contracts/.env
-frontend/.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
 
-# Build outputs
-build/
-dist/
-.vite/
-
-# Smart contract artifacts
-smart_contracts/artifacts/
-smart_contracts/cache/
-
-# IDE files
-.vscode/
-.idea/
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+*.log
 
 # OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Logs
-*.log
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.code-workspace
 
-# Private keys (NEVER COMMIT!)
-*.key
-private-key.txt
-wallet.json
+# Build files
+*.tsbuildinfo
+
+# Cache
+.cache
+.parcel-cache
+.eslintcache
+
+# Temporary files
+*.tmp
+*.temp
+~*
+
+# MongoDB
+/data
+/db
+
+# Misc
+*.seed
+*.pid
+*.pid.lock
+.grunt
+lib-cov
+coverage
+.nyc_output
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon
