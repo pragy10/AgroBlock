@@ -7,6 +7,11 @@ require('dotenv').config();
 // Import routes
 const userRoutes = require('./routes/userRoutes');
 const productRoutes = require('./routes/productRoutes');
+const authRoutes = require('./routes/authRoutes');
+const transferRequestRoutes = require('./routes/transferRequestRoutes');
+const blockchainRoutes = require('./routes/blockchainRoutes');
+
+
 
 // Initialize express app
 const app = express();
@@ -18,7 +23,12 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/users', userRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/requests', transferRequestRoutes);
+app.use('/api/blockchain', blockchainRoutes);
+
+
 
 // Health check route
 app.get('/', (req, res) => {

@@ -3,17 +3,23 @@ const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const { BlockchainSimulator } = require('../contracts/AgriSupplyChain.sol');
 const { generateQRCode } = require('../utils/qrGenerator');
+const { convertToBase64 } = require('../utils/imageUpload');
+const BlockchainHelper = require('../utils/blockchainHelper');
 
-// Register new product (Farmer only)
+// Register new product (Farmer only) with images
 exports.registerProduct = async (req, res) => {
   try {
     const { 
-      name, 
+      name,
+      description,
       category, 
       quantity, 
       unit, 
+      price,
       ownerId, 
-      originLocation, 
+      originLocation,
+      originLatitude,
+      originLongitude,
       harvestDate,
       expiryDate 
     } = req.body;
@@ -30,6 +36,15 @@ exports.registerProduct = async (req, res) => {
     // Generate unique product ID
     const productId = `PROD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     
+    // Process uploaded images
+    let images = [];
+    if (req.files && req.files.length > 0) {
+      images = req.files.map(file => ({
+        url: convertToBase64(file),
+        publicId: `${productId}-${Date.now()}`
+      }));
+    }
+
     // Simulate blockchain smart contract call
     const blockchainTx = await BlockchainSimulator.registerProduct({
       productId,
@@ -43,19 +58,41 @@ exports.registerProduct = async (req, res) => {
     const product = new Product({
       productId,
       name,
+      description,
       category,
       quantity,
       unit,
+      price,
+      images,
       currentOwner: farmer._id,
       currentOwnerWallet: farmer.walletAddress,
       originLocation,
+      originLatitude: parseFloat(originLatitude) || null,
+      originLongitude: parseFloat(originLongitude) || null,
       currentLocation: originLocation,
+      currentLatitude: parseFloat(originLatitude) || null,
+      currentLongitude: parseFloat(originLongitude) || null,
       harvestDate,
       expiryDate,
       blockchainTxHash: blockchainTx.txHash,
       smartContractAddress: blockchainTx.contractAddress,
       ipfsHash: BlockchainSimulator.generateIPFSHash(),
-      status: 'registered'
+      status: 'registered',
+      supplyChain: [{
+        role: 'farmer',
+        user: farmer._id,
+        wallet: farmer.walletAddress,
+        receivedAt: new Date(),
+        status: 'registered',
+        blockchainTxHash: blockchainTx.txHash
+      }],
+      locationHistory: [{
+        location: originLocation,
+        latitude: parseFloat(originLatitude) || null,
+        longitude: parseFloat(originLongitude) || null,
+        status: 'registered',
+        updatedBy: farmer._id
+      }]
     });
     
     // Generate QR code
@@ -67,6 +104,7 @@ exports.registerProduct = async (req, res) => {
     // Create initial transaction record
     const transaction = new Transaction({
       productId: product.productId,
+      product: product._id,
       fromOwner: farmer._id,
       fromWallet: farmer.walletAddress,
       toOwner: farmer._id,
@@ -76,10 +114,27 @@ exports.registerProduct = async (req, res) => {
       gasUsed: blockchainTx.gasUsed,
       blockNumber: blockchainTx.blockNumber,
       location: originLocation,
+      latitude: parseFloat(originLatitude) || null,
+      longitude: parseFloat(originLongitude) || null,
       notes: 'Product registered on blockchain'
     });
     
     await transaction.save();
+
+    // Add to blockchain
+    await BlockchainHelper.createBlock([{
+      txHash: blockchainTx.txHash,
+      type: 'PRODUCT_REGISTRATION',
+      from: farmer.walletAddress,
+      to: farmer.walletAddress,
+      productId: product.productId,
+      data: {
+        name,
+        category,
+        farmer: farmer.name,
+        location: originLocation
+      }
+    }]);
     
     res.status(201).json({
       success: true,
@@ -104,103 +159,113 @@ exports.registerProduct = async (req, res) => {
   }
 };
 
-// Transfer product ownership
-exports.transferProduct = async (req, res) => {
+// Update product status and location
+exports.updateProductStatus = async (req, res) => {
   try {
-    const { productId, fromOwnerId, toOwnerId, location, temperature, humidity, notes } = req.body;
-    
-    // Get product
-    const product = await Product.findOne({ productId });
+    const { productId } = req.params;
+    const { status, location, latitude, longitude, temperature, humidity, notes, userId } = req.body;
+
+    const product = await Product.findOne({ productId }).populate('currentOwner');
     if (!product) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Product not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
       });
     }
-    
-    // Verify current owner
-    if (product.currentOwner.toString() !== fromOwnerId) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Unauthorized: You are not the current owner' 
-      });
+
+    // Simulate blockchain transaction
+    const txHash = BlockchainSimulator.generateTxHash();
+
+    // Update product status and location
+    if (status) product.status = status;
+    if (location) product.currentLocation = location;
+    if (latitude) product.currentLatitude = parseFloat(latitude);
+    if (longitude) product.currentLongitude = parseFloat(longitude);
+
+    // Update quality metrics
+    if (temperature || humidity) {
+      product.qualityMetrics = {
+        temperature: parseFloat(temperature) || product.qualityMetrics?.temperature,
+        humidity: parseFloat(humidity) || product.qualityMetrics?.humidity,
+        lastChecked: new Date()
+      };
     }
-    
-    // Get users
-    const fromOwner = await User.findById(fromOwnerId);
-    const toOwner = await User.findById(toOwnerId);
-    
-    if (!fromOwner || !toOwner) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Owner not found' 
-      });
-    }
-    
-    // Simulate blockchain smart contract call
-    const blockchainTx = await BlockchainSimulator.transferOwnership(
-      productId,
-      fromOwner.walletAddress,
-      toOwner.walletAddress
-    );
-    
-    // Update product ownership
-    product.currentOwner = toOwner._id;
-    product.currentOwnerWallet = toOwner.walletAddress;
-    product.currentLocation = location || product.currentLocation;
-    product.status = 'in-transit';
-    product.blockchainTxHash = blockchainTx.txHash;
-    
+
+    // Add to location history
+    product.locationHistory.push({
+      location: location || product.currentLocation,
+      latitude: parseFloat(latitude) || product.currentLatitude,
+      longitude: parseFloat(longitude) || product.currentLongitude,
+      status: status || product.status,
+      updatedBy: userId
+    });
+
+    product.blockchainTxHash = txHash;
     await product.save();
-    
+
     // Create transaction record
     const transaction = new Transaction({
       productId: product.productId,
-      fromOwner: fromOwner._id,
-      fromWallet: fromOwner.walletAddress,
-      toOwner: toOwner._id,
-      toWallet: toOwner.walletAddress,
-      transactionType: 'transfer',
-      blockchainTxHash: blockchainTx.txHash,
-      gasUsed: blockchainTx.gasUsed,
-      blockNumber: blockchainTx.blockNumber,
-      location,
-      temperature,
-      humidity,
-      notes: notes || `Transferred from ${fromOwner.role} to ${toOwner.role}`
+      product: product._id,
+      fromOwner: product.currentOwner._id,
+      fromWallet: product.currentOwner.walletAddress,
+      toOwner: product.currentOwner._id,
+      toWallet: product.currentOwner.walletAddress,
+      transactionType: 'status_update',
+      blockchainTxHash: txHash,
+      gasUsed: BlockchainSimulator.calculateGas(),
+      location: location || product.currentLocation,
+      latitude: parseFloat(latitude) || null,
+      longitude: parseFloat(longitude) || null,
+      temperature: parseFloat(temperature) || null,
+      humidity: parseFloat(humidity) || null,
+      notes: notes || 'Status updated'
     });
-    
+
     await transaction.save();
-    
+
+    // Add to blockchain
+    await BlockchainHelper.createBlock([{
+      txHash,
+      type: 'STATUS_UPDATE',
+      from: product.currentOwner.walletAddress,
+      to: product.currentOwner.walletAddress,
+      productId: product.productId,
+      data: {
+        status,
+        location,
+        updatedBy: product.currentOwner.name
+      }
+    }]);
+
     res.status(200).json({
       success: true,
-      message: 'Ownership transferred successfully on blockchain',
+      message: 'Product status updated on blockchain',
       data: {
         product,
-        transaction,
-        blockchainTx: {
-          txHash: blockchainTx.txHash,
-          blockNumber: blockchainTx.blockNumber,
-          gasUsed: blockchainTx.gasUsed
-        }
+        transaction
       }
     });
   } catch (error) {
-    console.error('Transfer error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error during transfer',
-      error: error.message 
+    console.error('Update product status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
     });
   }
 };
 
-// Get product by ID with full history
+// Get product by ID with full journey
 exports.getProductById = async (req, res) => {
   try {
     const { productId } = req.params;
     
-    const product = await Product.findOne({ productId }).populate('currentOwner');
+    const product = await Product.findOne({ productId })
+      .populate('currentOwner')
+      .populate('supplyChain.user')
+      .populate('locationHistory.updatedBy');
+      
     if (!product) {
       return res.status(404).json({ 
         success: false, 
@@ -228,6 +293,41 @@ exports.getProductById = async (req, res) => {
       success: false, 
       message: 'Server error',
       error: error.message 
+    });
+  }
+};
+
+// Get all available products (for distributors/retailers/consumers)
+exports.getAvailableProducts = async (req, res) => {
+  try {
+    const { role } = req.query;
+
+    let query = { isAvailable: true };
+
+    // Filter based on user role
+    if (role === 'distributor') {
+      query.status = 'registered';
+    } else if (role === 'retailer') {
+      query.status = 'at_distributor';
+    } else if (role === 'consumer') {
+      query.status = 'at_retailer';
+    }
+
+    const products = await Product.find(query)
+      .populate('currentOwner')
+      .sort({ createdAt: -1 });
+    
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      data: products
+    });
+  } catch (error) {
+    console.error('Get available products error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
     });
   }
 };

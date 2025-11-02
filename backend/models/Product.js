@@ -1,5 +1,20 @@
 const mongoose = require('mongoose');
 
+const locationHistorySchema = new mongoose.Schema({
+  location: String,
+  latitude: Number,
+  longitude: Number,
+  timestamp: {
+    type: Date,
+    default: Date.now
+  },
+  status: String,
+  updatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }
+});
+
 const productSchema = new mongoose.Schema({
   productId: {
     type: String,
@@ -9,6 +24,10 @@ const productSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true
+  },
+  description: {
+    type: String,
+    default: ''
   },
   category: {
     type: String,
@@ -22,6 +41,14 @@ const productSchema = new mongoose.Schema({
     type: String,
     default: 'kg'
   },
+  price: {
+    type: Number,
+    default: 0
+  },
+  images: [{
+    url: String,
+    publicId: String
+  }],
   currentOwner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -33,17 +60,30 @@ const productSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['registered', 'in-transit', 'delivered', 'sold'],
+    enum: ['registered', 'pending_distribution', 'in_transit', 'at_distributor', 'at_retailer', 'sold', 'delivered'],
     default: 'registered'
   },
   originLocation: {
     type: String,
     required: true
   },
+  originLatitude: {
+    type: Number
+  },
+  originLongitude: {
+    type: Number
+  },
   currentLocation: {
     type: String,
     required: true
   },
+  currentLatitude: {
+    type: Number
+  },
+  currentLongitude: {
+    type: Number
+  },
+  locationHistory: [locationHistorySchema],
   harvestDate: {
     type: Date,
     required: true
@@ -51,6 +91,29 @@ const productSchema = new mongoose.Schema({
   expiryDate: {
     type: Date
   },
+  certifications: [{
+    name: String,
+    issuedBy: String,
+    issuedDate: Date,
+    certificateUrl: String
+  }],
+  qualityMetrics: {
+    temperature: Number,
+    humidity: Number,
+    ph: Number,
+    lastChecked: Date
+  },
+  supplyChain: [{
+    role: String,
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    wallet: String,
+    receivedAt: Date,
+    status: String,
+    blockchainTxHash: String
+  }],
   qrCode: {
     type: String
   },
@@ -63,6 +126,10 @@ const productSchema = new mongoose.Schema({
   },
   ipfsHash: {
     type: String
+  },
+  isAvailable: {
+    type: Boolean,
+    default: true
   },
   createdAt: {
     type: Date,
